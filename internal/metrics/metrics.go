@@ -1,68 +1,69 @@
-// Package metrics tracks runtime counters for portwatch: scans performed,
-// alerts emitted, and suppressed events. Values are safe for concurrent use.
+// Package metrics tracks runtime counters for the portwatch daemon.
 package metrics
 
 import (
-	"fmt"
-	"io"
-	"os"
+	"sync"
 	"sync/atomic"
-	"text/tabwriter"
 	"time"
 )
 
-// Counters holds atomic runtime metrics for a single daemon lifecycle.
-type Counters struct {
-	ScansTotal    atomic.Int64
-	AlertsTotal   atomic.Int64
-	SuppressTotal atomic.Int64
-	ErrorsTotal   atomic.Int64
-	startedAt     time.Time
+// Snapshot is a point-in-time copy of all counters.
+type Snapshot struct {
+	Uptime     time.Duration
+	Scans      int64
+	Alerts     int64
+	Suppressed int64
+	Errors     int64
 }
 
-// New returns a Counters instance with the start time set to now.
-func New() *Counters {
-	return &Counters{startedAt: time.Now()}
+// Metrics holds atomic counters and a start timestamp.
+type Metrics struct {
+	startTime  time.Time
+	scans      atomic.Int64
+	alerts     atomic.Int64
+	suppressed atomic.Int64
+	errors     atomic.Int64
+	mu         sync.Mutex // guards startTime resets in tests
 }
 
-// IncScans increments the scan counter by 1.
-func (c *Counters) IncScans() { c.ScansTotal.Add(1) }
-
-// IncAlerts increments the alert counter by 1.
-func (c *Counters) IncAlerts() { c.AlertsTotal.Add(1) }
-
-// IncSuppressed increments the suppressed-event counter by 1.
-func (c *Counters) IncSuppressed() { c.SuppressTotal.Add(1) }
-
-// IncErrors increments the error counter by 1.
-func (c *Counters) IncErrors() { c.ErrorsTotal.Add(1) }
-
-// Uptime returns the duration since the Counters were created.
-func (c *Counters) Uptime() time.Duration {
-	return time.Since(c.startedAt)
+// New creates a Metrics instance with the current time as start.
+func New() *Metrics {
+	return &Metrics{startTime: time.Now()}
 }
 
-// WriteTo writes a human-readable summary of all counters to w.
-// It returns the number of bytes written and any error.
-func (c *Counters) WriteTo(w io.Writer) (int64, error) {
-	if w == nil {
-		w = os.Stdout
+// IncScans increments the scan counter by one.
+func (m *Metrics) IncScans() { m.scans.Add(1) }
+
+// IncAlerts increments the alert counter by one.
+func (m *Metrics) IncAlerts() { m.alerts.Add(1) }
+
+// IncSuppressed increments the suppressed-alert counter by one.
+func (m *Metrics) IncSuppressed() { m.suppressed.Add(1) }
+
+// IncErrors increments the error counter by one.
+func (m *Metrics) IncErrors() { m.errors.Add(1) }
+
+// Snapshot returns a consistent point-in-time view of all counters.
+func (m *Metrics) Snapshot() Snapshot {
+	m.mu.Lock()
+	start := m.startTime
+	m.mu.Unlock()
+	return Snapshot{
+		Uptime:     time.Since(start),
+		Scans:      m.scans.Load(),
+		Alerts:     m.alerts.Load(),
+		Suppressed: m.suppressed.Load(),
+		Errors:     m.errors.Load(),
 	}
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	lines := []string{
-		fmt.Sprintf("uptime\t%s", c.Uptime().Round(time.Second)),
-		fmt.Sprintf("scans_total\t%d", c.ScansTotal.Load()),
-		fmt.Sprintf("alerts_total\t%d", c.AlertsTotal.Load()),
-		fmt.Sprintf("suppressed_total\t%d", c.SuppressTotal.Load()),
-		fmt.Sprintf("errors_total\t%d", c.ErrorsTotal.Load()),
-	}
-	var total int64
-	for _, l := range lines {
-		n, err := fmt.Fprintln(tw, l)
-		total += int64(n)
-		if err != nil {
-			return total, err
-		}
-	}
-	return total, tw.Flush()
+}
+
+// Reset zeroes all counters and resets the start time. Intended for tests.
+func (m *Metrics) Reset() {
+	m.scans.Store(0)
+	m.alerts.Store(0)
+	m.suppressed.Store(0)
+	m.errors.Store(0)
+	m.mu.Lock()
+	m.startTime = time.Now()
+	m.mu.Unlock()
 }
