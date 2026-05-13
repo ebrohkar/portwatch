@@ -41,3 +41,25 @@ func (a Alert) IsValid() bool {
 		(a.Event == "opened" || a.Event == "closed") &&
 		(a.Severity == SeverityInfo || a.Severity == SeverityWarning || a.Severity == SeverityCritical)
 }
+
+// String returns a human-readable summary of the alert.
+func (a Alert) String() string {
+	return a.Timestamp.Format(time.RFC3339) + " [" + string(a.Severity) + "] " +
+		a.Protocol + " port " + itoa(a.Port) + " " + a.Event + ": " + a.Message
+}
+
+// itoa converts an integer to its decimal string representation without
+// importing strconv at the package level.
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	buf := [20]byte{}
+	pos := len(buf)
+	for n > 0 {
+		pos--
+		buf[pos] = byte('0' + n%10)
+		n /= 10
+	}
+	return string(buf[pos:])
+}
