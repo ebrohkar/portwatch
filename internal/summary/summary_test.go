@@ -96,3 +96,28 @@ func TestWrite_ShowsRecentAlerts(t *testing.T) {
 		t.Errorf("did not expect oldest port in recent output, got: %s", out)
 	}
 }
+
+// TestWrite_MultipleWrites ensures the summary output is not cumulative across
+// successive Write calls — each call should reflect the current history state.
+func TestWrite_MultipleWrites(t *testing.T) {
+	h := history.New(0)
+	h.Add(makeAlert(80, "opened", "info"))
+
+	var buf bytes.Buffer
+	r := summary.New(h, &buf, time.Minute)
+	r.Write()
+
+	first := buf.String()
+	if !strings.Contains(first, "Total alerts: 1") {
+		t.Errorf("first write: expected total 1, got: %s", first)
+	}
+
+	buf.Reset()
+	h.Add(makeAlert(443, "opened", "warning"))
+	r.Write()
+
+	second := buf.String()
+	if !strings.Contains(second, "Total alerts: 2") {
+		t.Errorf("second write: expected total 2, got: %s", second)
+	}
+}
