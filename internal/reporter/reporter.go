@@ -42,28 +42,32 @@ func (r *Reporter) Run(ctx context.Context) error {
 	prev := r.store.Current()
 	added, removed := state.Diff(prev, openPorts)
 
-	for _, port := range added {
-		alerts := r.ruleSet.Evaluate(port, rules.EventOpened)
-		for _, a := range alerts {
-			if err := r.notifier.Send(a); err != nil {
-				return fmt.Errorf("reporter: notify failed: %w", err)
-			}
-		}
+	if err := r.evaluateAndNotify(added, rules.EventOpened); err != nil {
+		return err
 	}
 
-	for _, port := range removed {
-		alerts := r.ruleSet.Evaluate(port, rules.EventClosed)
-		for _, a := range alerts {
-			if err := r.notifier.Send(a); err != nil {
-				return fmt.Errorf("reporter: notify failed: %w", err)
-			}
-		}
+	if err := r.evaluateAndNotify(removed, rules.EventClosed); err != nil {
+		return err
 	}
 
 	if err := r.store.Save(openPorts); err != nil {
 		return fmt.Errorf("reporter: save state failed: %w", err)
 	}
 
+	return nil
+}
+
+// evaluateAndNotify runs rule evaluation for each port in the list under the
+// given event type and sends any resulting alerts via the notifier.
+func (r *Reporter) evaluateAndNotify(ports []int, event rules.EventType) error {
+	for _, port := range ports {
+		alerts := r.ruleSet.Evaluate(port, event)
+		for _, a := range alerts {
+			if err := r.notifier.Send(a); err != nil {
+				return fmt.Errorf("reporter: notify failed (port %d, event %s): %w", port, event, err)
+			}
+		}
+	}
 	return nil
 }
 
