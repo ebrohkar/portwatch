@@ -2,7 +2,6 @@ package mute
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/example/portwatch/internal/alert"
 )
@@ -20,10 +19,13 @@ func NewStage(store *Store) *Stage {
 	return &Stage{store: store}
 }
 
-// Allow returns false (dropping the alert) when the port is muted.
+// Allow returns the alert unchanged when the port is not muted.
+// When the port is muted it returns (zero Alert, false, nil), signalling to
+// the pipeline that the alert should be silently dropped without treating it
+// as an error condition.
 func (s *Stage) Allow(_ context.Context, a alert.Alert) (alert.Alert, bool, error) {
 	if s.store.IsMuted(a.Port) {
-		return alert.Alert{}, false, fmt.Errorf("mute: port %d is muted", a.Port)
+		return alert.Alert{}, false, nil
 	}
 	return a, true, nil
 }
