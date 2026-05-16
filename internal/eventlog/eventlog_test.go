@@ -64,6 +64,22 @@ func TestRecord_SetsTimestampWhenZero(t *testing.T) {
 	}
 }
 
+func TestRecord_PreservesExplicitTimestamp(t *testing.T) {
+	var buf bytes.Buffer
+	explicit := time.Date(2023, 6, 15, 12, 0, 0, 0, time.UTC)
+	el := New(&buf)
+	// now should not override an already-set timestamp
+	el.now = func() time.Time { return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC) }
+
+	_ = el.Record(Entry{Port: 80, Event: "opened", Severity: "info", Timestamp: explicit})
+
+	var got Entry
+	_ = json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &got)
+	if !got.Timestamp.Equal(explicit) {
+		t.Errorf("timestamp: got %v, want explicit %v", got.Timestamp, explicit)
+	}
+}
+
 func TestRecord_InvalidPort(t *testing.T) {
 	var buf bytes.Buffer
 	el := New(&buf)
