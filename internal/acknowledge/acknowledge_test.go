@@ -53,6 +53,17 @@ func TestIsAcknowledged_Expired(t *testing.T) {
 	}
 }
 
+func TestIsAcknowledged_AtExactExpiry(t *testing.T) {
+	var now = epoch
+	s := withClock(func() time.Time { return now })
+	s.Acknowledge(8080, "open", time.Minute)
+
+	now = epoch.Add(time.Minute) // exactly at expiry boundary
+	if s.IsAcknowledged(8080, "open") {
+		t.Fatal("expected acknowledgement to have expired at exact TTL boundary")
+	}
+}
+
 func TestRevoke_RemovesEntry(t *testing.T) {
 	s := withClock(fixedClock(epoch))
 	s.Acknowledge(8080, "open", time.Hour)
