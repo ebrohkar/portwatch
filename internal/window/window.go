@@ -65,6 +65,24 @@ func (w *Window) Reset(key int) {
 	delete(w.buckets, key)
 }
 
+// Keys returns all keys that currently have at least one event within the
+// window. Expired entries are evicted before the check.
+func (w *Window) Keys() []int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	now := w.clock()
+	keys := make([]int, 0, len(w.buckets))
+	for key := range w.buckets {
+		w.buckets[key] = w.evict(key, now)
+		if len(w.buckets[key]) > 0 {
+			keys = append(keys, key)
+		} else {
+			delete(w.buckets, key)
+		}
+	}
+	return keys
+}
+
 // evict removes timestamps older than the window size and returns the
 // remaining slice. Caller must hold w.mu.
 func (w *Window) evict(key int, now time.Time) []time.Time {
