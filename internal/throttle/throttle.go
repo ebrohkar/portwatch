@@ -98,3 +98,19 @@ func (t *Throttle) Reset() {
 	defer t.mu.Unlock()
 	t.buckets = t.buckets[:0]
 }
+
+// Stats returns a snapshot of the current throttle state: the number of
+// events used in the current window and the configured maximum.
+func (t *Throttle) Stats() (used, max int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	now := t.clock()
+	cutoff := now.Add(-t.window)
+	for _, ts := range t.buckets {
+		if ts.After(cutoff) {
+			used++
+		}
+	}
+	return used, t.max
+}
