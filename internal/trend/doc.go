@@ -6,7 +6,18 @@
 // downstream pipeline stages or summary reporters to surface emerging threats
 // before they trigger hard thresholds.
 //
-// Example usage:
+// # Architecture
+//
+// A Tracker maintains a circular buffer of time buckets per port. Each call to
+// Record increments the count for the current bucket. When Summary is called,
+// the tracker compares the two most recent non-empty buckets to classify the
+// trend direction:
+//
+//   - Rising:  current bucket count exceeds the previous bucket count
+//   - Falling: current bucket count is below the previous bucket count
+//   - Stable:  counts are equal, or fewer than two buckets have data
+//
+// # Example usage
 //
 //	tr := trend.New(time.Minute, 5)
 //	tr.Record(8080)
